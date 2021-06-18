@@ -10,6 +10,15 @@ use strict;
 use warnings;
 use Log::ger;
 
+use Exporter qw(import);
+our @EXPORT_OK = qw(
+                       dump_sqlite_kvstore
+                       list_sqlite_kvstore_keys
+                       get_sqlite_kvstore_value
+                       set_sqlite_kvstore_value
+                       check_sqlite_kvstore_key_exists
+               );
+
 our $db_schema_spec = {
     latest_v => 1,
     install => [
@@ -182,6 +191,35 @@ _
     },
 );
 
+$SPEC{dump_sqlite_kvstore} = {
+    v => 1.1,
+    summary => 'Dump content of key-value store as hash',
+    description => <<'_',
+_
+    args => {
+        %argspecs_common,
+    },
+};
+sub dump_sqlite_kvstore {
+    my %args = @_;
+
+    my ($res, $dbh) = _init(\%args);
+    return $res unless $res->[0] == 200;
+
+    my %hash;
+    my $sth = $dbh->prepare("SELECT key,value,encoding FROM kvstore");
+    $sth->execute;
+    while (my $row = $sth->fetchrow_arrayref) {
+        my $res = _decode_value($row->[1], $row->[2]);
+        if ($res->[0] != 200) {
+            warn "Key '$row->[0]' cannot be decoded: $res->[0] - $res->[1], skipped";
+            next;
+        }
+        $hash{ $row->[0] } = $res->[2];
+    }
+    [200, "OK", \%hash];
+}
+
 $SPEC{list_sqlite_kvstore_keys} = {
     v => 1.1,
     summary => 'List existing keys in the key-value store',
@@ -313,6 +351,7 @@ sub check_sqlite_kvstore_key_exists {
 From Perl:
 
  use SQLite::KeyValueStore::Simple qw(
+     dump_sqlite_kvstore
      list_sqlite_kvstore_keys
      get_sqlite_kvstore_value
      set_sqlite_kvstore_value
