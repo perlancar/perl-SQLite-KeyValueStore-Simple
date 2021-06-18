@@ -249,7 +249,7 @@ $SPEC{get_sqlite_kvstore_value} = {
     summary => 'Get the current value of a key, will return undef if key does not exist',
     description => <<'_',
 
-CLI will exit non-zero (1) when key does not exist.
+CLI will exit non-zero when key does not exist.
 
 _
     args => {
@@ -265,7 +265,7 @@ sub get_sqlite_kvstore_value {
     return $res unless $res->[0] == 200;
 
     my $row = $dbh->selectrow_arrayref("SELECT value,encoding FROM kvstore WHERE key=?", {}, $args{key});
-    return [200, "OK", undef, {'cmdline.exit_code'=>1}] unless $row;
+    return [404, "No such key found"] unless $row;
     $res = _decode_value(@$row);
     return $res unless $res->[0] == 200;
     _encode_value($res->[2], $args{output_encoding});
