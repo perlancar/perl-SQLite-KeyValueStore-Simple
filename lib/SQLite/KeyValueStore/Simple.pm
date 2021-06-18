@@ -287,6 +287,7 @@ _
         %argspec1_value,
         %argspecopt_input_encoding,
         %argspecopt_output_encoding,
+        %argspecopt_quiet,
     },
 };
 sub set_sqlite_kvstore_value {
@@ -318,7 +319,11 @@ sub set_sqlite_kvstore_value {
         }
     }
     $dbh->commit;
-    _encode_value($oldval, $args{output_encoding});
+    if ($args{quiet}) {
+        [200, "OK"];
+    } else {
+        _encode_value($oldval, $args{output_encoding});
+    }
 }
 
 $SPEC{check_sqlite_kvstore_key_exists} = {
