@@ -115,7 +115,7 @@ our %argspec0_key = (
         schema => ['str*', max_len=>255],
         req => 1,
         pos => 0,
-        cmdline_aliases =>
+        cmdline_aliases => {k=>{}},
     },
 );
 
@@ -131,7 +131,7 @@ our %argspec1_value = (
 our %argspecopt_input_encoding = (
     input_encoding => {
         summary => 'Input encoding',
-        schema => 'str*', in=>['r','j','h','b'],
+        schema => ['str*', in=>['r','j','h','b']],
         default => 'r',
         cmdline_aliases => {e=>{}},
         description => <<'_',
@@ -147,7 +147,7 @@ _
 our %argspecopt_output_encoding = (
     output_encoding => {
         summary => 'Output encoding',
-        schema => 'str*', in=>['r','j','h','b'],
+        schema => ['str*', in=>['r','j','h','b']],
         cmdline_aliases => {E=>{}},
         description => <<'_',
 
@@ -226,7 +226,7 @@ sub get_sqlite_kvstore_value {
     my ($res, $dbh) = _init(\%args);
     return $res unless $res->[0] == 200;
 
-    my $row = $dbh->selectrow_array("SELECT value,encoding FROM kvstore WHERE key=?", {}, $args{key});
+    my $row = $dbh->selectrow_arrayref("SELECT value,encoding FROM kvstore WHERE key=?", {}, $args{key});
     return [200, "OK", undef, {'cmdline.exit_code'=>1}] unless $row;
     $res = _decode_value(@$row);
     return $res unless $res->[0] == 200;
@@ -261,11 +261,11 @@ sub set_sqlite_kvstore_value {
     $dbh->begin_work;
   WORK: {
       GET_OLD_VAL: {
-            my $row = $dbh->selectrow_array("SELECT value,encoding FROM kvstore WHERE key=?", {}, $args{key});
+            my $row = $dbh->selectrow_arrayref("SELECT value,encoding FROM kvstore WHERE key=?", {}, $args{key});
             if ($row) {
                 my $dres = _decode_value(@$row);
                 do { $res = $dres; last WORK } unless $dres->[0] == 200;
-                $oldval = $res->[2];
+                $oldval = $dres->[2];
             }
         }
 
@@ -273,8 +273,9 @@ sub set_sqlite_kvstore_value {
             my $dres = _decode_value($args{value}, $args{input_encoding} // 'r');
             do { $res = $dres; last WORK } unless $dres->[0] == 200;
             my $newval = $dres->[2];
-            my $encoded = _encode_value($newval, ref $newval || !defined($newval) ? 'j' : 'r');
-            $dbh->do("INSERT OR IGNORE INTO kvstore (key,value,encoding) (?,'','r')", {}, $args{key});
+            my $eres = _encode_value($newval, ref $newval || !defined($newval) ? 'j' : 'r');
+            my $encoded = $eres->[2];
+            $dbh->do("INSERT OR IGNORE INTO kvstore (key,value,encoding) VALUES (?,'','r')", {}, $args{key});
             $dbh->do("UPDATE kvstore SET value=? WHERE key=?", {}, $encoded, $args{key});
         }
     }
@@ -299,7 +300,7 @@ sub check_sqlite_kvstore_key_exists {
 
     my $row = $dbh->selectrow_array("SELECT value FROM kvstore WHERE key=?", {}, $args{key});
     [200, "OK", $row ? 1:0, {
-        ($args{quiet} ? ("cmdline.output" => "") : ()),
+        ($args{quiet} ? ("cmdline.result" => "") : ()),
         "cmdline.exit_code" => $row ? 0:1,
     }];
 }
@@ -339,7 +340,20 @@ From Perl:
 
 From command-line (install L<App::SQLiteKeyValueStoreSimpeUtils>):
 
- ...
+ # list existing keys in the store
+ % list-sqlite-kvstore-keys
+
+ # set value of a key (returns the old value)
+ % set-sqlite-kvstore-value foo bar
+ % set-sqlite-kvstore-value foo baz
+ bar
+
+ # get value of a key
+ % get-sqlite-kvstore-value foo
+ baz
+
+ # check existence of a key
+ % check-sqlite-kvstore-key-exists foo
 
 
 =head1 SEE ALSO
