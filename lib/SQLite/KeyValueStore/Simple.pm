@@ -59,7 +59,7 @@ sub _decode_value {
     if ($encoding eq 'j') {
         require JSON::MaybeXS;
         eval { $decoded = JSON::MaybeXS::decode_json($value) };
-        return [500, "Can't decode JSON value: $@"];
+        return [500, "Can't decode JSON value: $@"] if $@;
     } elsif ($encoding eq 'r') {
         $decoded = $value;
     } elsif ($encoding eq 'h') {
@@ -84,7 +84,7 @@ sub _encode_value {
     } elsif ($encoding eq 'j') {
         require JSON::MaybeXS;
         eval { $encoded = JSON::MaybeXS::encode_json($value) };
-        return [500, "Can't encode JSON value: $@"];
+        return [500, "Can't encode JSON value: $@"] if $@;
     } else {
         return [412, "Can't encode undef/structure to '$encoding', please choose 'j'"]
             if ref $value or !defined($value);
@@ -312,10 +312,11 @@ sub set_sqlite_kvstore_value {
             my $dres = _decode_value($args{value}, $args{input_encoding} // 'r');
             do { $res = $dres; last WORK } unless $dres->[0] == 200;
             my $newval = $dres->[2];
-            my $eres = _encode_value($newval, ref $newval || !defined($newval) ? 'j' : 'r');
+            my $store_encoding = ref $newval || !defined($newval) ? 'j' : 'r';
+            my $eres = _encode_value($newval, $store_encoding);
             my $encoded = $eres->[2];
-            $dbh->do("INSERT OR IGNORE INTO kvstore (key,value,encoding) VALUES (?,'','r')", {}, $args{key});
-            $dbh->do("UPDATE kvstore SET value=? WHERE key=?", {}, $encoded, $args{key});
+            $dbh->do("INSERT OR IGNORE INTO kvstore (key,value,encoding) VALUES (?,'','')", {}, $args{key});
+            $dbh->do("UPDATE kvstore SET value=?,encoding=? WHERE key=?", {}, $encoded, $store_encoding, $args{key});
         }
     }
     $dbh->commit;
